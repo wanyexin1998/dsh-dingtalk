@@ -32,7 +32,7 @@ test('real Cordis: host service loads, fails closed, unloads, and reloads cleanl
 
 test('DSH platform Client registers a real settings slot; unloading leaves existing sections intact', async () => {
   const slots = new SlotCore();
-  const owner = slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'tool.call.toolview': { kind: 'keyed', scope: 'session' } } }, () => null);
+  const owner = slots.register({ name: 'root', children: { 'conversation.chat.turnTail': { kind: 'list', scope: 'session' }, 'settings.section': { kind: 'list', scope: 'root' }, 'tool.call.toolview': { kind: 'keyed', scope: 'session' } } }, () => null);
   const general = slots.register({ name: 'settings.section', id: 'general', order: 0, label: '通用' }, () => null);
   let client;
   vm.runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), { AbortController, clearTimeout, window: { addEventListener() {}, removeEventListener() {}, __ModuleLoader__: { load({ id, factory }) {
@@ -50,9 +50,11 @@ test('DSH platform Client registers a real settings slot; unloading leaves exist
       const html = renderToStaticMarkup(React.createElement(client.ConnectionSection, { store: { subscribe() { return () => {}; }, get() { return { status: { state: 'unlinked', reasonCode: 'not_connected' } }; } } }));
       assert.match(html, /尚未连接钉钉/);
       assert.equal(slots.entriesOfSlot('tool.call.toolview')[0].options.key, 'dingtalk_call');
+      assert.deepEqual(slots.entriesOfSlot('conversation.chat.turnTail').map(entry => entry.options.id), ['dsh-dingtalk-authorization']);
       assert.ok(!html.includes('已连接'));
       await fiber.dispose();
       assert.deepEqual(slots.entriesOfSlot('settings.section').map(entry => entry.options.id), ['general']);
+      assert.equal(slots.entriesOfSlot('conversation.chat.turnTail').length, 0);
     }
   } finally { await ctx.fiber.dispose(); general(); owner(); }
 });

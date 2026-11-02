@@ -11,6 +11,9 @@ import { DEFAULT_LIMITS, parseConfig } from '../lib/shared/config.js';
 import { sandbox } from '../scripts/g0/runtime.mjs';
 
 const input = { operationId: 'docs.search', args: { query: '测试', limit: 2 } };
+// Windows process startup can exceed short fixture deadlines under a full CI run.
+// Keep production limits unchanged; allow readiness before asserting timeout/kill.
+const fixtureTimeout = process.platform === 'win32' ? 15000 : 5000;
 async function fixture(control = {}, limits = {}) {
   const isolated = await sandbox();
   const trace = join(isolated.root, 'trace.jsonl');
@@ -19,7 +22,7 @@ async function fixture(control = {}, limits = {}) {
   await writeFile(trace, '');
   await writeFile(file, JSON.stringify({ ...control, trace, childPid }));
   let running = 0, maximum = 0;
-  const backend = createLocalBackend({ binaryPath: process.execPath, profile: 'test-corp:test-user' }, { ...DEFAULT_LIMITS, timeoutMs: 5000, ...limits }, {
+  const backend = createLocalBackend({ binaryPath: process.execPath, profile: 'test-corp:test-user' }, { ...DEFAULT_LIMITS, timeoutMs: fixtureTimeout, ...limits }, {
     verify: async () => process.execPath,
     environment: { ...isolated.env, MOCK_DWS_CONTROL: file },
     spawn(binary, args, options) {
@@ -35,7 +38,7 @@ async function fixture(control = {}, limits = {}) {
     async dispose() { await backend.dispose(); await isolated.dispose(); } };
 }
 async function waitFor(predicate) {
-  const end = Date.now() + 4000;
+  const end = Date.now() + (process.platform === 'win32' ? 15000 : 4000);
   while (Date.now() < end) { if (await predicate()) return; await new Promise(resolve => setTimeout(resolve, 15)); }
   throw new Error('Fixture did not reach expected state');
 }
@@ -72,7 +75,7 @@ test('three operations use exact Profile, verify identity, redact results, and k
     for (const request of [{ operationId: 'identity.getSelf', args: {} }, { operationId: 'calendar.listEvents', args: { start: '2026-11-02T00:00:00+08:00', end: '2026-11-03T00:00:00+08:00', limit: 2 } },
       { operationId: 'docs.search', args: { query: '--profile=other; echo injected', cursor: '--base-url=http://invalid' } }]) {
       const result = await f.backend.invoke(request);
-      assert.equal(result.status, 'ok');
+      assert.equal(result.status, 'ok', `${request.operationId}: ${result.reasonCode || result.status}`);
       assert.ok(!JSON.stringify(result).includes('test-private'));
     }
     assert.equal((await f.backend.status()).state, 'connected');
@@ -189,7 +192,7 @@ test('queued calls expire without starting and are drained on dispose', async ()
 
 test('timeout and Abort kill the subprocess tree, including a spawned child', async () => {
   for (const abort of [false, true]) {
-    const f = await fixture({ spawnChild: true }, { timeoutMs: abort ? 5000 : 1400 });
+    const f = await fixture({ spawnChild: true }, { timeoutMs: abort ? fixtureTimeout : process.platform === 'win32' ? 5000 : 1400 });
     const controller = new AbortController();
     try {
       const active = f.backend.invoke(input, { signal: controller.signal });

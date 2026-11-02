@@ -8,6 +8,8 @@ import { ConnectionStore } from './store.js';
 import type { ClientConnection } from './store.js';
 import { localize, translate } from './i18n.js';
 import type { LocaleFace } from './i18n.js';
+import { authorizationTail } from './tail.js';
+import type { ChatSnapshot } from './tail.js';
 
 interface SettingsSlots { register(options: object, component: (props: any) => ReactNode): () => void; inject?(name: string, action: () => void): unknown }
 export const name = 'dsh-dingtalk';
@@ -83,7 +85,7 @@ export function ToolView({ store, language = 'zh', ...props }: ToolProps & { sto
   try { result = JSON.parse(text); } catch {}
   if (props.phase !== 'result') return localize(h('div', { className: 'dsh-dt-row', role: 'status' }, h('style', null, cardCss), '钉钉 · 正在读取…'), language);
   if (result.status === 'ok') return localize(h('div', { className: 'dsh-dt-row', role: 'status' }, h('style', null, cardCss), '钉钉 · 查询完成'), language);
-  if (result.status === 'auth_required' || result.reasonCode === 'authorization_expired') return h(AuthorizationFeedback, { store, language, sessionId: props.sessionId, callId: props.callId, reason: result.reasonCode || 'not_connected' });
+  if (result.status === 'auth_required' || result.reasonCode === 'authorization_expired') return localize(h('div', { className: 'dsh-dt-row', role: 'status' }, '钉钉 · 等待连接'), language);
   const detail = result.reasonCode === 'invalid_cli_output' ? '查询结果暂时无法读取。' : ['queue_timeout', 'queue_full'].includes(result.reasonCode || '') ? '查询繁忙，请稍后重试。' : result.status === 'denied' ? messageFor(result.reasonCode).title : '查询暂未完成，请稍后重试。';
   return localize(h('div', { className: 'dsh-dt-row', role: 'status' }, h('style', null, cardCss), '钉钉 · ', detail), language);
 }
@@ -91,12 +93,26 @@ function LocalizedView({ locale, render }: { locale: LocaleFace; render(language
   const language = useSyncExternalStore(fn => locale.subscribe(fn), () => locale.getSnapshot(), () => locale.getSnapshot()).active;
   return render(language);
 }
+export interface AuthorizationTailProps {
+  sessionId: string;
+  turn: { turn: number };
+  useChat: (selector: (snapshot: ChatSnapshot) => string) => string;
+}
+export function AuthorizationTail({ store, language = 'zh', ...props }: AuthorizationTailProps & { store: ConnectionStore; language?: string }): ReactNode {
+  const serialized = props.useChat(authorizationTail);
+  if (!serialized) return null;
+  const prompt = JSON.parse(serialized) as { turn: number; callId: string; reason: import('../shared/models.js').ReasonCode };
+  if (prompt.turn !== props.turn.turn) return null;
+  return h('div', { 'data-dingtalk-authorization-tail': true, style: { display: 'contents' } },
+    h(AuthorizationFeedback, { key: prompt.callId, store, language, sessionId: props.sessionId, callId: prompt.callId, reason: prompt.reason }));
+}
 export function apply(ctx: Context & { slots: SettingsSlots; connection: ClientConnection; locale: LocaleFace }, config: unknown): void {
   parseConfig(config);
   const store = new ConnectionStore(ctx.connection);
   ctx.effect(() => () => store.dispose());
   const settings = () => { ctx.effect(() => ctx.slots.register({ name: 'settings.section', id: 'dsh-dingtalk', order: 60, label: () => translate('钉钉连接', ctx.locale.getSnapshot().active) }, () => h(LocalizedView, { locale: ctx.locale, render: language => h(ConnectionSection, { store, language }) }))); };
   const tool = () => { ctx.effect(() => ctx.slots.register({ name: 'tool.call.toolview', key: 'dingtalk_call' }, (props: ToolProps) => h(LocalizedView, { locale: ctx.locale, render: language => h(ToolView, { ...props, store, language }) }))); };
-  if (ctx.slots.inject) { ctx.slots.inject('settings.section', settings); ctx.slots.inject('tool.call.toolview', tool); }
-  else { settings(); tool(); }
+  const tail = () => { ctx.effect(() => ctx.slots.register({ name: 'conversation.chat.turnTail', id: 'dsh-dingtalk-authorization', order: 90 }, (props: AuthorizationTailProps) => h(LocalizedView, { locale: ctx.locale, render: language => h(AuthorizationTail, { ...props, store, language }) }))); };
+  if (ctx.slots.inject) { ctx.slots.inject('settings.section', settings); ctx.slots.inject('tool.call.toolview', tool); ctx.slots.inject('conversation.chat.turnTail', tail); }
+  else { settings(); tool(); tail(); }
 }

@@ -13,6 +13,7 @@ const english: Record<string, string> = {
   '刷新状态': 'Refresh status', '解除连接': 'Disconnect', '确认解除连接': 'Confirm disconnect', '保留连接': 'Keep connection',
   '解除钉钉连接？': 'Disconnect DingTalk?', '停止后续读取，并撤销此插件绑定账号的本地 DWS 凭据。再次使用需要重新授权。': 'Stop future reads and remove this plugin’s bound local DWS credentials. Authorization will be required again.',
   '钉钉只读查询': 'DingTalk read-only query', '暂不连接': 'Not now', '收起': 'Hide', '钉钉 · 显示连接': 'DingTalk · Show connection',
+  '钉钉 · 等待连接': 'DingTalk · Waiting for connection',
   '钉钉 · 正在读取…': 'DingTalk · Reading…', '钉钉 · 查询完成': 'DingTalk · Query complete',
   '可继续刚才的查询。': 'You can continue your query.', '可继续刚才的查询。连接不会自动发送消息或执行查询。': 'You can continue your query. Connecting does not send a message or run a query automatically.',
   '请在新标签页完成授权。': 'Complete authorization in the new tab.', '正在打开…': 'Opening…', '取消': 'Cancel',

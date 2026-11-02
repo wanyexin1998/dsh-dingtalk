@@ -12,11 +12,13 @@ const routes = new Map();
 const peer = { id: 'browser', principal: { kind: 'owner' } };
 const cleanup = createUIRpc({ browserPeer: peer, admit: () => ({ peer }), fetch: { register(route) { routes.set(route.path, route); return async () => {}; } } }, f.managed, f.service);
 const browserErrors = [], checks = [];
-const source = `import React from 'react';import{createRoot}from'react-dom/client';import{ConnectionSection,ToolView}from'./lib/client/index.js';import{ConnectionStore}from'./lib/client/store.js';
+const source = `import React from 'react';import{createRoot}from'react-dom/client';import{ConnectionSection,ToolView,AuthorizationTail}from'./lib/client/index.js';import{ConnectionStore}from'./lib/client/store.js';
 const store=new ConnectionStore({rpc:{async call(channel,endpoint,payload,signal){return fetch('/rpc',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({endpoint,payload}),signal}).then(r=>r.json())}}});
 const root=createRoot(document.getElementById('app'));const results=[{status:'failed',reasonCode:'authorization_expired'},{status:'auth_required',reasonCode:'not_connected'}];
-function render(){root.render(React.createElement('main',null,React.createElement('label',null,'原会话草稿',React.createElement('textarea',{'aria-label':'原会话草稿',defaultValue:'请查询明天的日程'})),React.createElement(ConnectionSection,{store}),...results.map((result,n)=>React.createElement(ToolView,{key:n,store,phase:'result',callId:'call-'+n,sessionId:'session-example',block:{content:[{type:'text',text:JSON.stringify(result)}]}}))));}
-window.harness={store,add:result=>{results.push(result);render()},dispose:()=>{root.unmount();store.dispose()}};render();`;
+let thoughts=false;
+const useChat=selector=>selector({nodes:{values:()=>results.map((result,n)=>({kind:'tool-call',anchorSeq:n,visibility:'hidden',location:{kind:'step',turn:{turn:1}},data:{root:{kind:'tool-result',name:'dingtalk_call',callId:'call-'+n,content:[{type:'text',text:JSON.stringify(result)}]}}}))}});
+function render(){root.render(React.createElement('main',null,React.createElement('label',null,'原会话草稿',React.createElement('textarea',{'aria-label':'原会话草稿',defaultValue:'请查询明天的日程'})),React.createElement(ConnectionSection,{store}),React.createElement('section',{id:'thinking'},thoughts?results.map((result,n)=>React.createElement(ToolView,{key:n,store,phase:'result',callId:'call-'+n,sessionId:'session-example',block:{content:[{type:'text',text:JSON.stringify(result)}]}})):null),React.createElement('p',{id:'final-answer'},'连接钉钉后可查询。'),React.createElement(AuthorizationTail,{store,sessionId:'session-example',turn:{turn:1},useChat})));}
+window.harness={store,add:result=>{results.push(result);render()},toggleThoughts:()=>{thoughts=!thoughts;render()},dispose:()=>{root.unmount();store.dispose()}};render();`;
 const compiled = await build({ stdin: { contents: source, resolveDir: process.cwd(), sourcefile: 'browser-harness.ts' }, bundle: true, write: false, format: 'iife', platform: 'browser', define: { 'process.env.NODE_ENV': '"production"' } });
 const server = createServer(async (req, res) => {
   if (req.url === '/app.js') { res.setHeader('Content-Type', 'application/javascript'); res.end(compiled.outputFiles[0].text); return; }
@@ -41,10 +43,12 @@ try {
   await page.getByRole('status').first().filter({ hasText: '尚未连接钉钉' }).waitFor();
   await page.locator('.dsh-dt-card').waitFor();
   assert.equal(await page.locator('.dsh-dt-card').count(), 1);
+  assert.equal(await page.locator('#thinking .dsh-dt-card').count(), 0);
+  assert.ok(await page.evaluate(() => !!(document.getElementById('final-answer').compareDocumentPosition(document.querySelector('.dsh-dt-card')) & Node.DOCUMENT_POSITION_FOLLOWING)));
   await page.evaluate(() => { for(let n=0;n<4;n++) window.harness.add({status:'auth_required',reasonCode:'not_connected'}); });
   await page.waitForTimeout(100);
   assert.equal(await page.locator('.dsh-dt-card').count(), 1);
-  await page.evaluate(() => { window.originalCards = [...document.querySelectorAll('.dsh-dt-card')]; });
+  await page.evaluate(() => { window.originalCards = [...document.querySelectorAll('.dsh-dt-card')]; window.harness.toggleThoughts(); });
   await page.getByRole('textbox', { name: '原会话草稿' }).fill('请查询明天日程，保留这份草稿');
   // Spoofed messages cannot set a UI status; Host readback is required.
   await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { origin: 'https://evil.invalid', data: { type: 'dsh-dingtalk:auth', result: 'connected', transactionId: 'fake' } })));
@@ -69,6 +73,7 @@ try {
   assert.equal(await page.getByRole('textbox').inputValue(), '请查询明天日程，保留这份草稿');
   assert.match(page.url(), /session\/example#draft$/);
   await popup.waitForEvent('close', { timeout: 3000 }).catch(() => {});
+  checks.push('authorization card is after final prose while thinking ToolViews are unmounted; expanding thinking does not duplicate it');
   checks.push('six auth-required Tool calls share one original card; callback updates settings + that card; original URL/draft preserved; spoof ignored');
   await page.evaluate(() => { window.harness.add({status:'ok',data:{items:[]}});window.harness.add({status:'failed',reasonCode:'invalid_cli_output',retryable:false});window.harness.add({status:'failed',reasonCode:'queue_timeout',retryable:true}); });
   await page.getByText('钉钉 · 查询完成', { exact: true }).waitFor();

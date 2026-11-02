@@ -1,6 +1,6 @@
 {
   "name": "@wanyexin1998/dsh-dingtalk",
-  "version": "0.1.0-phase1.1",
+  "version": "0.1.0-phase1.2",
   "description": "DingTalk connector fork with local DSH Web authorization",
   "type": "module",
   "main": "lib/index.js",
@@ -126,7 +126,8 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-tool",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-settings-general"
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-ui-chat"
       ],
       "platform": "web"
     }
