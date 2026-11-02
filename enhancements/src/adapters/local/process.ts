@@ -34,20 +34,31 @@ async function killTree(child: ChildProcessWithoutNullStreams): Promise<void> {
   });
 }
 export async function runProcess(binary: string, args: string[], env: NodeJS.ProcessEnv, limits: ExecutionLimits,
-  signal: AbortSignal, launch: SpawnFactory = spawnDws, input = ''): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  signal: AbortSignal, launch: SpawnFactory = spawnDws, input = '', options: { cwd?: string; onValue?: (value: unknown) => void } = {}): Promise<{ code: number | null; stdout: string; stderr: string }> {
   if (signal.aborted) throw new ConnectionServiceError(signal.reason === 'execution_timeout' ? 'execution_timeout' : 'execution_cancelled');
   return new Promise((resolve, reject) => {
     let child: ChildProcessWithoutNullStreams;
-    try { child = launch(binary, args, { shell: false, windowsHide: true, detached: process.platform !== 'win32', cwd: dirname(binary), env }); }
+    try { child = launch(binary, args, { shell: false, windowsHide: true, detached: process.platform !== 'win32', cwd: options.cwd || dirname(binary), env }); }
     catch { reject(new ConnectionServiceError('cli_missing')); return; }
     let failure: ReasonCode | undefined, size = 0, killing: Promise<void> | undefined;
     const stdout: Buffer[] = [], stderr: Buffer[] = [];
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let pending = '';
+    const drain = (final = false) => {
+      while (pending.includes('\n')) { const at = pending.indexOf('\n'); const line = pending.slice(0, at).trim(); pending = pending.slice(at + 1); if (line) options.onValue!(JSON.parse(line)); }
+      if (final && pending.trim()) { options.onValue!(JSON.parse(pending)); pending = ''; }
+    };
     const stop = (reason: ReasonCode): void => { failure ??= reason; killing ??= killTree(child); };
     const abort = (): void => stop(signal.reason === 'execution_timeout' ? 'execution_timeout' : 'execution_cancelled');
     const timer = setTimeout(() => stop('execution_timeout'), limits.timeoutMs);
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
     for (const [stream, output] of [[child.stdout, stdout], [child.stderr, stderr]] as const) stream.on('data', (chunk: Buffer) => {
+      if (failure) return;
+      if (options.onValue && stream === child.stdout) {
+        try { pending += decoder.decode(chunk, { stream: true }); if (Buffer.byteLength(pending) > limits.maxOutputBytes) { stop('output_limit_exceeded'); return; } drain(); } catch { stop('invalid_cli_output'); }
+        return;
+      }
       size += chunk.length;
       if (size > limits.maxOutputBytes) stop('output_limit_exceeded');
       else if (!failure) output.push(chunk);
@@ -56,6 +67,7 @@ export async function runProcess(binary: string, args: string[], env: NodeJS.Pro
     child.on('close', async code => {
       clearTimeout(timer); signal.removeEventListener('abort', abort);
       await killing;
+      if (options.onValue && !failure) { try { pending += decoder.decode(); drain(true); } catch { failure = 'invalid_cli_output'; } }
       if (failure) { reject(new ConnectionServiceError(failure)); return; }
       try {
         const decoder = new TextDecoder('utf-8', { fatal: true });

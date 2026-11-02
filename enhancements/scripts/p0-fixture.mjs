@@ -38,8 +38,8 @@ export async function fixture({ automatic = false, install = automatic } = {}) {
         const user = req.headers['x-user-access-token']?.replace(/^synthetic-/, '').replace(/-access$/, '');
         const name = body.params.name;
         if (name === 'get_current_user_profile') state.identityCalls++;
-        assert.ok(['get_current_user_profile', 'list_calendar_events', 'search_documents'].includes(name));
-        events.push({ type: 'read', user, name });
+        assert.ok(['get_current_user_profile', 'list_calendar_events', 'search_documents', 'create_personal_todo'].includes(name));
+        events.push({ type: name === 'create_personal_todo' ? 'write' : 'read', user, name, ...(name === 'search_documents' ? { arguments: body.params.arguments } : {}) });
         const result = name === 'get_current_user_profile' ? [{ orgEmployeeModel: { corpId: 'test-corp', userId: user } }] : { items: [{ title: '合成查询结果' }] };
         if ((state.businessFailure && name !== 'get_current_user_profile') || state.identityCalls === state.failIdentityAt) { res.statusCode = 403; value = { synthetic: 'private-response-body' }; }
         else value = { jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: JSON.stringify({ result }) }], isError: false } };
@@ -52,7 +52,7 @@ export async function fixture({ automatic = false, install = automatic } = {}) {
   const callbackPort = await freePort();
   const settings = { stateDirectory: join(isolated.root, 'state'), ...(!automatic ? { oauth: { clientId: 'synthetic-app', scopes: 'openid', redirectUri: `http://127.0.0.1:${callbackPort}/dsh-dingtalk/callback`, expectedCorpId: 'test-corp', expectedUserId: 'test-user' } } : {}) };
   const config = join(settings.stateDirectory, 'dws');
-  const env = { ...isolated.env, DWS_AUDIT: '0', DWS_CONFIG_DIR: config, DWS_ALLOW_HTTP_ENDPOINTS: '1', DWS_TRUSTED_DOMAINS: '127.0.0.1', DINGTALK_CONTACT_MCP_URL: `${base}/contact`, DINGTALK_CALENDAR_MCP_URL: `${base}/calendar`, DINGTALK_DOC_MCP_URL: `${base}/doc` };
+  const env = { ...isolated.env, DWS_AUDIT: '0', DWS_CONFIG_DIR: config, DWS_ALLOW_HTTP_ENDPOINTS: '1', DWS_TRUSTED_DOMAINS: '127.0.0.1', DINGTALK_CONTACT_MCP_URL: `${base}/contact`, DINGTALK_CALENDAR_MCP_URL: `${base}/calendar`, DINGTALK_DOC_MCP_URL: `${base}/doc`, DINGTALK_TODO_MCP_URL: `${base}/todo` };
   const runtime = { environment: env,
     archive: async () => { events.push({ type: 'install' }); return readFile(resolve('../.cache/dingtalk-g0/downloads/dws-windows-amd64.zip')); },
     discoverClient: async () => { events.push({ type: 'discover' }); return (await (await fetch(`${base}/cli/clientId`)).json()).result; },

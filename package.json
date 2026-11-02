@@ -1,6 +1,6 @@
 {
   "name": "@wanyexin1998/dsh-dingtalk",
-  "version": "0.1.0-phase1.2",
+  "version": "0.2.0-dev.2",
   "description": "DingTalk connector fork with local DSH Web authorization",
   "type": "module",
   "main": "lib/index.js",
@@ -42,6 +42,7 @@
   "packageManager": "pnpm@11.7.0",
   "files": [
     "docs/PHASE1.md",
+    "docs/DWS-CAPABILITIES.md",
     "lib",
     "assets",
     "cordis.patch.yml",

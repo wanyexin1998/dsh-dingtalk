@@ -16,13 +16,13 @@
 
 公开连接状态只含展示所需的企业/员工脱敏名称、能力摘要、确认时间和受控原因码。适配器负责准备可信且已脱敏的名称，服务按白名单投影；corpId/userId、profile、credential path、Code/Token/Secret 不进入连接 DTO。AuthStart 不允许携带 code/token/secret 查询参数。
 
-只读输入当前预留：
+兼容输入：
 
 - `identity.getSelf`：空 args。
 - `calendar.listEvents`：start/end（带时区的 ISO 时间）、limit 1–100、cursor。
 - `docs.search`：query、limit 1–30、cursor。
 
-拒绝未知字段、写操作和用户可选的内部目标。没有 command/argv/shell/cwd/userId/profile/path/URL 通道。三个 operation 已映射官方命令；不把官方 Skill 中的其他入口纳入白名单。
+新增 dws.catalog / dws.describe / dws.execute / dws.jobs。command 只能精确匹配锁定版本官方目录；参数名和类型由该命令 Schema 校验。无任意 argv/shell 或账号切换通道。写入通过 Host 原生确认。详见 ../../docs/DWS-CAPABILITIES.md。
 
 业务结果按 JsonValue 输出，限制深度及节点数量，并拒绝包含常见凭证字段名的嵌套对象。DWS 进程层的字节上限、日志脱敏、业务输出映射和更完整的资源控制属于 #6/#8，不能由本契约替代。
 
@@ -32,7 +32,7 @@
 
 `local` 与 `cellgent` 模拟适配器运行相同契约测试，测试类不装进归档。生产入口使用 managed LocalBackend：无私有配置即可加载，未绑定时返回 unlinked/not_connected，invoke 阻断既有默认账号读取。只有 UI begin 才准备锁定 DWS、发现官方应用并启动动态 loopback；准备中返回 authorizing/connection_preparing。首次从在线核验的身份建立绑定，后续重授权核对绑定；status 不能仅靠缓存返回 connected，重启后重新在线确认。
 
-CallOptions 只携带 Host 执行生命周期的 AbortSignal，属于同进程操作参数，不是模型 JSON、Tool 参数或可序列化 RPC 入参。队列、进程和错误细节见 [LOCAL-BACKEND.md](LOCAL-BACKEND.md)。
+CallOptions 携带 Host 执行生命周期的 AbortSignal，以及可信会话 ID、工作目录、原生确认回调，属于同进程操作参数，不是模型 JSON、Tool 参数或可序列化 RPC 入参。队列、进程和错误细节见 [LOCAL-BACKEND.md](LOCAL-BACKEND.md)。
 
 配置类型保留 `mode=local|cellgent`。P0 加载时明确拒绝 cellgent，拒绝未知配置和非法 mode，不会静默切回 local。真实远端适配器和 Connector 均未实现；未来增加适配器时保持本服务契约，不在 Tool/Client/Skill 硬编码企业路径或身份。
 

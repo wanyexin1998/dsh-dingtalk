@@ -14,6 +14,13 @@ if (stage === 'version') {
   }));
 } else if (stage === 'contact user get-self') {
   console.log(JSON.stringify({ success: true, result: [{ orgEmployeeModel: { corpId: 'test-corp', userId: control.wrongIdentity ? 'wrong-user' : 'test-user' } }] }));
+} else if (control.stream) {
+  const bytes = Buffer.from(JSON.stringify({ success: true, text: '合成中文事件', access_token: 'test-private-access' }) + '\n');
+  // Split inside a UTF-8 character, exercising streaming decoder state.
+  const at = bytes.indexOf(Buffer.from('中')) + 1;
+  process.stdout.write(bytes.subarray(0, at));
+  setTimeout(() => { process.stdout.write(bytes.subarray(at)); if (!control.hang) process.exit(0); }, 15);
+  if (control.hang) setInterval(() => {}, 1000);
 } else if (control.flatDocuments && stage === 'doc search') {
   console.log(JSON.stringify({ success: true, documents: control.badDocuments ? null : control.emptyDocuments ? [] : [{ name: '合成中文文档', nodeId: 'synthetic-node' }], hasMore: false, nextPageToken: '' }));
 } else if (control.pat) {

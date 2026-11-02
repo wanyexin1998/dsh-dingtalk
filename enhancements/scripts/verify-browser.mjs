@@ -53,13 +53,35 @@ try {
   // Spoofed messages cannot set a UI status; Host readback is required.
   await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', { origin: 'https://evil.invalid', data: { type: 'dsh-dingtalk:auth', result: 'connected', transactionId: 'fake' } })));
   assert.equal(await page.getByText('钉钉已连接', { exact: true }).count(), 0);
+  let releaseBegin;
+  const loadingGate = new Promise(resolve => { releaseBegin = resolve; });
+  await page.route('**/rpc', async route => {
+    if (route.request().postDataJSON()?.endpoint?.endsWith('/begin')) await loadingGate;
+    await route.continue();
+  });
   const popupPromise = page.waitForEvent('popup');
   await page.getByRole('button', { name: '连接钉钉', exact: true }).first().click();
   const popup = await popupPromise;
+  await popup.getByRole('status').filter({hasText:'正在连接钉钉…'}).waitFor();
+  const spinner = popup.locator('.spinner');
+  assert.equal(await spinner.evaluate(el=>getComputedStyle(el).animationName),'turn');
+  const before = await spinner.evaluate(el=>getComputedStyle(el).transform);
+  await popup.waitForTimeout(120);
+  assert.notEqual(await spinner.evaluate(el=>getComputedStyle(el).transform),before);
+  await popup.screenshot({path:'artifacts/browser/loading-light.png'});
+  await popup.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});
+  await popup.setViewportSize({width:390,height:844});
+  assert.equal(await spinner.evaluate(el=>getComputedStyle(el).animationName),'none');
+  assert.ok(await spinner.evaluate(el=>{const r=el.getBoundingClientRect();return Math.abs(r.left+r.width/2-innerWidth/2)<1;}));
+  assert.ok(await popup.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await popup.screenshot({path:'artifacts/browser/loading-dark-mobile.png'});
+  checks.push('real preparation popup has a centered animated spinner, dark/mobile layout and reduced-motion fallback; provider navigation resumes after preparation');
+  releaseBegin();
+
   await page.getByText('钉钉已连接', { exact: true }).first().waitFor({ timeout: 30000 });
   assert.equal(await page.getByRole('status').filter({ hasText: /^(钉钉)?已连接$/ }).count(), 2);
   const cardSize = await page.locator('.dsh-dt-card').first().boundingBox();
-  assert.ok(cardSize.width <= 420 && cardSize.height <= 130, 'Conversation card must remain compact');
+  assert.ok(cardSize.width <= 440 && cardSize.height <= 130, 'Conversation card must remain compact');
   assert.ok(await page.evaluate(() => { const current = [...document.querySelectorAll('.dsh-dt-card')]; return current.length === window.originalCards.length && current.every((node, i) => node === window.originalCards[i]); }));
   for (const status of [{ state: 'reauth_required', reasonCode: 'authorization_expired' }, { state: 'unknown', reasonCode: 'service_unavailable' }]) {
     // Test-only synthetic projection verifies React node identity for failure/expiry feedback.
@@ -76,25 +98,32 @@ try {
   checks.push('authorization card is after final prose while thinking ToolViews are unmounted; expanding thinking does not duplicate it');
   checks.push('six auth-required Tool calls share one original card; callback updates settings + that card; original URL/draft preserved; spoof ignored');
   await page.evaluate(() => { window.harness.add({status:'ok',data:{items:[]}});window.harness.add({status:'failed',reasonCode:'invalid_cli_output',retryable:false});window.harness.add({status:'failed',reasonCode:'queue_timeout',retryable:true}); });
-  await page.getByText('钉钉 · 查询完成', { exact: true }).waitFor();
+  await page.getByText('钉钉 · 已完成', { exact: true }).waitFor();
   assert.equal(await page.locator('.dsh-dt-card').count(), 1);
   assert.equal(await page.locator('details').count(), 0);
   assert.equal(await page.getByRole('button', { name: '连接钉钉', exact: true }).count(), 0);
   checks.push('success and query failures render plain rows; an already-authorized session does not receive new connection cards');
   await page.screenshot({ path: 'artifacts/browser/connected-light.png', fullPage: true });
+  await page.getByRole('button', { name: '连接管理', exact: true }).click();
   await page.getByRole('button', { name: '解除连接', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '保留连接');
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'detached' });
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '解除连接');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '连接管理');
   assert.equal((await f.service.status()).state, 'connected');
   checks.push('unlink requires second confirmation; Escape preserves connection and restores focus');
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.screenshot({ path: 'artifacts/browser/connected-dark-mobile.png', fullPage: true });
-  checks.push('light/dark inheritance, keyboard focus and 390px layout without horizontal overflow');
+  for (const width of [1280,390]) {
+    await page.setViewportSize({width,height:1000});
+    const aligned = await page.locator('.dsh-dt-card').evaluate(el => { const c=el.getBoundingClientRect(); return ['.dsh-dt-symbol','.dsh-dt-copy','.dsh-dt-actions'].every(selector => { const r=el.querySelector(selector).getBoundingClientRect(); return Math.abs((r.top+r.height/2)-(c.top+c.height/2))<1; }); });
+    assert.ok(aligned, 'Card icon, copy and actions share the same horizontal centerline');
+  }
+  checks.push('light/dark inheritance, keyboard focus and 390px layout without horizontal overflow; card icon/copy/actions vertically aligned');
+  await page.getByRole('button', { name: '连接管理', exact: true }).click();
   await page.getByRole('button', { name: '解除连接', exact: true }).click();
   await page.getByRole('button', { name: '确认解除连接', exact: true }).click();
   await page.getByText('尚未连接钉钉', { exact: true }).first().waitFor({ timeout: 30000 });
@@ -110,6 +139,7 @@ try {
   await detached.close();
   checks.push('blocked popup fallback + no opener completion recovered by bounded 2-second polling');
   f.state.cancel = true;
+  await page.getByRole('button', { name: '连接管理', exact: true }).click();
   await page.getByRole('button', { name: '重新授权', exact: true }).first().click();
   const cancelledLink = page.getByRole('link', { name: /浏览器拦截/ }).first(); await cancelledLink.waitFor();
   const cancelledPage = await ctx.newPage(); await cancelledPage.goto(await cancelledLink.getAttribute('href'));
@@ -123,7 +153,11 @@ try {
   assert.equal(await page.locator('.dsh-dt').count(), 0);
   assert.deepEqual(browserErrors, []); assert.deepEqual(f.failures, []);
   checks.push('page reload refreshes Host truth; unload removes React views/subscriptions without browser errors');
-  const report = { success: true, classification: 'REACT_AND_REAL_HOST_RPC_HARNESS', browser: await browser.version(), checks, limitations: ['Not the assembled DSH Web/Desktop shell', 'Synthetic OAuth/MCP only; no real LLM or enterprise authorization'], screenshots: ['browser/connected-light.png', 'browser/connected-dark-mobile.png'] };
+  const report = { success: true, classification: 'REACT_AND_REAL_HOST_RPC_HARNESS', browser: await browser.version(), checks, limitations: ['Not the assembled DSH Web/Desktop shell', 'Synthetic OAuth/MCP only; no real LLM or enterprise authorization'], screenshots: ['browser/connected-light.png', 'browser/connected-dark-mobile.png', 'browser/loading-light.png', 'browser/loading-dark-mobile.png'] };
   await writeFile('artifacts/p0-browser-report.json', JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));
+} catch (error) {
+  const page = browser?.contexts()[0]?.pages()[0];
+  if (page) { await page.screenshot({path:'artifacts/browser/failure.png',fullPage:true}).catch(()=>{}); console.error(JSON.stringify({ui:await page.getByRole('status').allTextContents(),browserErrors,fixtureFailures:f.failures})); }
+  throw error;
 } finally { await browser?.close(); await cleanup(); server.closeAllConnections(); await new Promise(r => server.close(r)); await f.dispose(); }

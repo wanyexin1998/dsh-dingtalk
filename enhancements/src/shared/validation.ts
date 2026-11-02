@@ -43,6 +43,27 @@ export function parseAuthorizationContext(value: unknown): AuthorizationContext 
 }
 export function parseInvokeInput(value: unknown): InvokeInput {
   const data = exact(value, ['operationId', 'args']);
+  if (data.operationId === 'dws.catalog') {
+    const args = exact(data.args, ['product', 'query', 'offset', 'limit']);
+    const out: { product?: string; query?: string; offset?: number; limit?: number } = {};
+    for (const key of ['product','query'] as const) if (args[key] !== undefined) out[key] = text(args[key], 200);
+    for (const key of ['offset','limit'] as const) if (args[key] !== undefined) { const n = args[key]; if (typeof n !== 'number' || !Number.isInteger(n) || n < (key === 'limit' ? 1 : 0) || n > (key === 'limit' ? 30 : 10000)) return invalid(); out[key] = n; }
+    return { operationId: data.operationId, args: out };
+  }
+  if (data.operationId === 'dws.describe') { const args = exact(data.args, ['command']); return { operationId: data.operationId, args: { command: text(args.command, 180) } }; }
+  if (data.operationId === 'dws.execute') {
+    const args = exact(data.args, ['command','parameters','background']);
+    if (args.background !== undefined && typeof args.background !== 'boolean') return invalid();
+    const parameters = publicJson(record(args.parameters), { nodes: 0 });
+    if (JSON.stringify(parameters).length > 131072) return invalid();
+    return { operationId: data.operationId, args: { command: text(args.command, 180), parameters: parameters as Record<string, JsonValue>, ...(args.background !== undefined ? { background: args.background } : {}) } };
+  }
+  if (data.operationId === 'dws.jobs') {
+    const args = exact(data.args, ['action','jobId','cursor']);
+    if (!['list','read','stop'].includes(args.action as string)) return invalid();
+    if (args.cursor !== undefined && (typeof args.cursor !== 'number' || !Number.isInteger(args.cursor) || args.cursor < 0)) return invalid();
+    return { operationId: data.operationId, args: { action: args.action as 'list'|'read'|'stop', ...(args.jobId !== undefined ? { jobId: text(args.jobId,128) } : {}), ...(args.cursor !== undefined ? { cursor: args.cursor as number } : {}) } };
+  }
   if (data.operationId === 'identity.getSelf') {
     exact(data.args, []);
     return { operationId: data.operationId, args: {} };

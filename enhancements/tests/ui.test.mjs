@@ -19,11 +19,11 @@ test('settings and compact cards cover structured states without exposing intern
     }
   }
   const html = renderToStaticMarkup(React.createElement(ConnectionSection, { store: store({ state: 'unknown', reasonCode: 'connection_unknown' }), language: 'en' }));
-  assert.match(html, /Connection could not be verified/); assert.match(html, /Connect DingTalk/);
+  assert.match(html, /Connection could not be verified/); assert.match(html, /Refresh status/);
 });
 test('successful and ordinary failed queries use quiet inline feedback, never connection cards or raw results', () => {
   const html = renderToStaticMarkup(React.createElement(ToolView, { store: store({ state: 'connected' }), phase: 'result', callId: 'test', block: { content: [{ type: 'text', text: JSON.stringify({ status: 'ok', data: '<script>malicious()</script>' }) }] } }));
-  assert.match(html, /查询完成/); assert.ok(!html.includes('<details')); assert.ok(!html.includes('dsh-dt-card"'));
+  assert.match(html, /已完成/); assert.ok(!html.includes('<details')); assert.ok(!html.includes('dsh-dt-card"'));
   assert.ok(!html.includes('malicious'));
   assert.ok(!html.includes('连接钉钉')); assert.ok(!html.includes('解除连接'));
   for (const reasonCode of ['invalid_cli_output', 'queue_timeout', 'execution_timeout', 'service_unavailable']) {

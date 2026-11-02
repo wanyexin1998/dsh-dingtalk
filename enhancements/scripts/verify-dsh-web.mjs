@@ -27,15 +27,40 @@ try {
   const installed = await run(process.execPath, [cli, 'plugin', '--profile', 'p0-web', 'add', archive, '--ignore-scripts'], { env: isolated.env, cwd: isolated.root, timeoutMs: 180000 });
   assert.equal(installed.code, 0, installed.stderr.slice(-4000));
   console.log('Official archive installed into isolated Web Profile.');
+  // Test-only observer in this isolated profile; production plugin/core stay unchanged.
+  const probe = `import { writeFile } from 'node:fs/promises';
+export const name = 'capabilities-probe';
+export const inject = ['tools', 'skills', 'approval', 'workingDirectory', 'dingtalkConnection'];
+export async function apply(ctx) {
+  for (let i = 0; i < 50; i++) {
+    const skills = (await ctx.skills.list()).filter(s => s.provider === 'dsh-dingtalk');
+    const tool = ctx.tools.get('dingtalk_call');
+    if (skills.length === 34 && tool) {
+      const result = await tool.execute({operationId:'dws.catalog',args:{}}, {signal:new AbortController().signal});
+      await writeFile(new URL('./capabilities-host-report.json', import.meta.url), JSON.stringify({skills:skills.map(s=>s.name),operations:tool.parameters.properties.operationId.enum,catalogStatus:result.status,commands:result.data?.commands,approval:typeof ctx.approval.request,workspace:typeof ctx.workingDirectory.get}));
+      return;
+    }
+    await new Promise(r=>setTimeout(r,100));
+  }
+  throw Error('Capabilities registry did not become ready');
+}`;
+  await writeFile(join(profile, 'capabilities-probe.mjs'), probe);
+  await writeFile(join(profile, 'cordis.patch.yml'), (await readFile(join(profile, 'cordis.patch.yml'), 'utf8')).replace(/^\s*\[\]\s*$/, '') + '\n- insert:\n    - id: capabilities-probe\n      name: ./capabilities-probe.mjs\n');
   const port = await freePort();
   child = spawn(process.execPath, [cli, '--profile', 'p0-web', '--host', '127.0.0.1', '--port', String(port), '--no-open'], { env: isolated.env, cwd: isolated.root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let logs = ''; for (const stream of [child.stdout, child.stderr]) stream.on('data', value => { logs = (logs + value.toString()).slice(-24000); });
   const base = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 180000;
-  while (Date.now() < deadline) { if (child.exitCode !== null) throw new Error('DSH exited before readiness; raw startup URL withheld'); try { const response = await fetch(base, { signal: AbortSignal.timeout(2000) }); if ([200, 401].includes(response.status) && /dsh web: http/.test(logs)) break; } catch {} await new Promise(r => setTimeout(r, 500)); }
+  while (Date.now() < deadline) { if (child.exitCode !== null) { console.error(logs.split('\n').filter(line => /Error|failed|Cannot|not found|capabilities-probe|invalid|PluginLoad/.test(line)).map(line => line.replace(/https?:\/\/[^\s]+/g, '<url>')).join('\n').slice(-4000)); throw new Error('DSH exited before readiness; raw startup URL withheld'); } try { const response = await fetch(base, { signal: AbortSignal.timeout(2000) }); if ([200, 401].includes(response.status) && /dsh web: http/.test(logs)) break; } catch {} await new Promise(r => setTimeout(r, 500)); }
   const authenticated = logs.match(/dsh web: (http:\/\/[^\s]+)/)?.[1];
   assert.ok(authenticated && new URL(authenticated).origin === base, 'Native DSH authenticated handoff was not ready');
   console.log('Official DSH Web is ready.');
+  const hostReport = JSON.parse(await readFile(join(profile, 'capabilities-host-report.json'), 'utf8'));
+  assert.equal(hostReport.skills.length, 34); assert.equal(hostReport.commands, 1540);
+  assert.equal(hostReport.catalogStatus, 'ok'); assert.equal(hostReport.approval, 'function'); assert.equal(hostReport.workspace, 'function');
+  assert.ok(hostReport.operations.includes('dws.execute'));
+  await writeFile('artifacts/capabilities-host-report.json', JSON.stringify(hostReport, null, 2) + '\n');
+  checks.push('installed native Host exposes 34 DingTalk skills, 1540-command catalog, generic execution and native approval/workspace services');
   const hostDiagnostics = logs.split('\n').filter(line => /TEST_HOST|TEST_ROUTE|Error|dsh-dingtalk|INJECT|webServer|connection:/i.test(line)).map(line => line.replace(/https?:\/\/[^\s]+/g, '<url>'));
   if (hostDiagnostics.length) console.log(JSON.stringify({ hostDiagnostics }));
   browser = await chromium.launch({ executablePath: process.env.DSH_TEST_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
@@ -63,7 +88,7 @@ try {
   }
   const section = page.getByText('钉钉连接', { exact: true });
   if (await section.count()) await section.first().click();
-  await page.getByRole('heading', { name: '钉钉连接', exact: true }).waitFor({ timeout: 15000 });
+  await page.getByRole('heading', { name: '钉钉', exact: true }).waitFor({ timeout: 15000 });
   await page.getByText('尚未连接钉钉', { exact: true }).waitFor({ timeout: 15000 });
   assert.equal(await page.getByRole('button', { name: '连接钉钉', exact: true }).count(), 1);
   await page.screenshot({ path: 'artifacts/browser/native-web-settings.png', fullPage: true });

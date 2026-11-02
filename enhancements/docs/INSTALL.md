@@ -1,3 +1,5 @@
+> 以下保留原阶段记录。当前通用 DWS 执行边界与验收范围以 [DWS 能力说明](../../docs/DWS-CAPABILITIES.md) 为准；原三项只读复核不代表新增能力已通过独立安全复核。
+
 # 安装、升级与卸载（P0 开发候选）
 
 版本 `0.1.0-dev.6` 提供安装后直接连接授权、自动准备 DWS、三项只读 Tool/Skill、会话卡片和设置管理。用户不需要私有 JSON。先使用隔离 Profile；真实企业联调按 [AUTHORIZATION.md](AUTHORIZATION.md) 执行，当前不是生产发布。

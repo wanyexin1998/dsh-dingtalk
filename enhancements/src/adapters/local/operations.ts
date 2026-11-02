@@ -1,4 +1,4 @@
-import type { InvokeInput } from '../../shared/models.js';
+import type { InvokeInput, DwsInput } from '../../shared/models.js';
 import { parseInvokeInput } from '../../shared/validation.js';
 
 export const OPERATIONS = Object.freeze({
@@ -6,8 +6,8 @@ export const OPERATIONS = Object.freeze({
   'calendar.listEvents': Object.freeze(['calendar', 'event', 'list']),
   'docs.search': Object.freeze(['doc', 'search']),
 });
-export function operationArguments(input: InvokeInput, profile: string): string[] {
-  const request = parseInvokeInput(input);
+export function operationArguments(input: Exclude<InvokeInput, DwsInput>, profile: string): string[] {
+  const request = parseInvokeInput(input) as Exclude<InvokeInput, DwsInput>;
   const args = [...OPERATIONS[request.operationId]];
   // Equals-form prevents flag-shaped query/cursor strings becoming new CLI flags.
   for (const [key, value] of Object.entries(request.args)) args.push(`--${key}=${value}`);

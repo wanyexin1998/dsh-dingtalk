@@ -1,3 +1,5 @@
+> Web 能力扩展：已接入锁定版 DWS 的完整功能目录与通用调用，使用与限制见 [能力说明](docs/DWS-CAPABILITIES.md)。
+
 > Fork 第一阶段：Web 个人授权与查询已迁入；IM 暂限 owner 对话，工具执行转到 Web。未完成真实联合验收。详见 [阶段说明](docs/PHASE1.md)。
 
 # DSH DingTalk

@@ -16,6 +16,7 @@ import { provisionPrivateRuntime, verifyPrivacyGuard } from './privacy.js';
 import { ensureDws, officialClient } from './bootstrap.js';
 import type { BootstrapRuntime } from './bootstrap.js';
 import { defaultStateDirectory } from './private-settings.js';
+import { discover, describe } from '../catalog/index.js';
 import { join } from 'node:path';
 
 interface UIContext { browser: string; context: BrowserContext }
@@ -161,6 +162,8 @@ export async function createManagedConnection(local: LocalSettings, options: Pri
     },
     async invoke(input: InvokeInput, call: CallOptions = {}) {
       await check();
+      if (input.operationId === 'dws.catalog') return { status: 'ok', data: discover(input.args) };
+      if (input.operationId === 'dws.describe') return { status: 'ok', data: describe(input.args.command) };
       if (busy || !reader || record.revoked || record.verificationPending || record.revocationPending) return { status: 'auth_required', reasonCode: busy ? 'authorization_pending' : 'not_connected' };
       return reader.invoke(input, call);
     },

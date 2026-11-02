@@ -10,7 +10,7 @@ export class ExecutionQueue {
   private active: AbortController | undefined;
   private settled: Promise<unknown> = Promise.resolve();
   constructor(private readonly limits: ExecutionLimits) {}
-  run<T>(action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  run<T>(action: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, timeoutMs = this.limits.timeoutMs): Promise<T> {
     if (this.closed || signal?.aborted) return Promise.reject(new ConnectionServiceError('execution_cancelled'));
     if (this.running && this.pending.length >= this.limits.queueLimit) return Promise.reject(new ConnectionServiceError('queue_full'));
     return new Promise<T>((resolve, reject) => {
@@ -22,7 +22,7 @@ export class ExecutionQueue {
       const entryRef: Pending = {
         start: () => {
           remove(); started = true; this.running = true; this.active = controller;
-          const deadline = setTimeout(() => controller.abort('execution_timeout'), this.limits.timeoutMs);
+          const deadline = setTimeout(() => controller.abort('execution_timeout'), timeoutMs);
           signal?.addEventListener('abort', abort, { once: true });
           if (signal?.aborted || this.closed) controller.abort();
           const finish = (): void => {

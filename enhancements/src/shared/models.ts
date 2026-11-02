@@ -17,7 +17,7 @@ export const REASON_CODES = [
   'oauth_not_configured', 'invalid_auth_state', 'authorization_busy', 'revocation_failed',
   'privacy_guard_required', 'verification_failed_after_save', 'rate_limited',
   'org_policy_denied', 'scope_authorization_required', 'permission_denied',
-  'connection_preparing',
+  'connection_preparing', 'unknown_command', 'command_unavailable', 'host_managed_operation', 'confirmation_required', 'confirmation_rejected', 'file_access_denied', 'job_not_found', 'job_limit', 'outcome_unknown',
 ] as const;
 export type ReasonCode = typeof REASON_CODES[number];
 export type BackendMode = 'local' | 'cellgent';
@@ -34,8 +34,19 @@ export interface ConnectionStatus {
 export interface AuthorizationContext { sessionRef?: string; callRef?: string }
 export interface AuthStart { transactionId: string; authorizeUrl: string; expiresAt: string }
 /** Host operational cancellation; never part of the model/JSON arguments. */
-export interface CallOptions { signal?: AbortSignal }
-export type InvokeInput =
+export interface CallOptions {
+  signal?: AbortSignal;
+  /** Trusted Host context, never accepted from tool JSON. */
+  sessionId?: string;
+  workingDirectory?: string;
+  approve?: (summary: string) => Promise<boolean>;
+}
+export type DwsInput =
+  | { operationId: 'dws.catalog'; args: { product?: string; query?: string; offset?: number; limit?: number } }
+  | { operationId: 'dws.describe'; args: { command: string } }
+  | { operationId: 'dws.execute'; args: { command: string; parameters: Record<string, JsonValue>; background?: boolean } }
+  | { operationId: 'dws.jobs'; args: { action: 'list' | 'read' | 'stop'; jobId?: string; cursor?: number } };
+export type InvokeInput = DwsInput
   | { operationId: 'identity.getSelf'; args: Record<string, never> }
   | { operationId: 'calendar.listEvents'; args: { start?: string; end?: string; limit?: number; cursor?: string } }
   | { operationId: 'docs.search'; args: { query?: string; limit?: number; cursor?: string } };

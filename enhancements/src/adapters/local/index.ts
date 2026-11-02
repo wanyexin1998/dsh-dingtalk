@@ -6,6 +6,9 @@ import { parseInvokeInput } from '../../shared/validation.js';
 import { DwsExecutor } from './executor.js';
 import type { LocalRuntime } from './executor.js';
 import { operationArguments } from './operations.js';
+import { discover, describe, commandFor } from '../../catalog/index.js';
+import { prepareCommand } from './command.js';
+import { CommandJobs } from './jobs.js';
 import { ExecutionQueue } from './queue.js';
 import { redactData } from './redaction.js';
 import { parseLocalSettings } from './settings.js';
@@ -23,6 +26,8 @@ export function createLocalBackend(settings: LocalSettings = {}, limits: Executi
   const executor = new DwsExecutor(binding, resources, runtime);
   const queue = new ExecutionQueue(resources);
   const verified = new Set<string>();
+  const jobs = new CommandJobs();
+  let closed = false;
   let verifiedAt: string | undefined;
   const [corpId, userId] = binding.profile?.split(':') ?? [];
   async function snapshot(signal: AbortSignal): Promise<ConnectionStatus> {
@@ -57,6 +62,51 @@ export function createLocalBackend(settings: LocalSettings = {}, limits: Executi
     if (identity.corpId !== corpId || identity.userId !== userId) throw new ConnectionServiceError('identity_mismatch');
     return data;
   }
+  async function identityCheck(signal: AbortSignal) {
+    if (!binding.profile) throw new ConnectionServiceError('not_connected');
+    const status = await snapshot(signal);
+    if (status.state === 'unlinked') throw new ConnectionServiceError('not_connected');
+    if (status.state === 'identity_mismatch') throw new ConnectionServiceError('identity_mismatch');
+    if (status.state !== 'connected' && !['business_verification_required','token_refresh_pending'].includes(status.reasonCode || '')) throw new ConnectionServiceError(status.reasonCode || 'connection_unknown');
+    verifyIdentity(await executor.execute(operationArguments({ operationId: 'identity.getSelf', args: {} }, binding.profile), signal));
+  }
+  async function generic(request: import('../../shared/models.js').DwsInput, options: CallOptions): Promise<InvokeResult> {
+    let executing = false;
+    try {
+      if (request.operationId === 'dws.catalog') return { status: 'ok', data: discover(request.args) };
+      if (request.operationId === 'dws.describe') return { status: 'ok', data: describe(request.args.command) };
+      if (request.operationId === 'dws.jobs') return { status: 'ok', data: await jobs.access(options.sessionId, request.args) };
+      if (!binding.profile) return { status: 'auth_required', reasonCode: 'not_connected' };
+      const prepared = await prepareCommand(request.args, binding.profile, options, binding.configDirectory);
+      if (prepared.needsApproval) {
+        if (!options.approve) return { status: 'denied', reasonCode: 'confirmation_required', retryable: false };
+        if (!await options.approve(prepared.summary)) return { status: 'denied', reasonCode: 'confirmation_rejected', retryable: false };
+      }
+      if (closed || options.signal?.aborted) throw new ConnectionServiceError('execution_cancelled');
+      // Revalidate paths after the potentially long user decision, then verify the bound identity.
+      const ready = await prepareCommand(request.args, binding.profile, options, binding.configDirectory);
+      return await queue.run(async signal => {
+        await identityCheck(signal);
+        if (closed || signal.aborted) throw new ConnectionServiceError('execution_cancelled');
+        if (request.args.background) {
+          const data = jobs.start(options.sessionId, ready.contract.cli_path, (jobSignal, emit) => executor.execute(ready.argv, jobSignal, '', false, { ...(options.workingDirectory ? { cwd: options.workingDirectory } : {}), timeoutMs: 6 * 60 * 60 * 1000, onValue: emit }));
+          return { status: 'ok', data };
+        }
+        executing = true;
+        const value = await executor.execute(ready.argv, signal, '', true, { ...(options.workingDirectory ? { cwd: options.workingDirectory } : {}), timeoutMs: 120000 });
+        const data = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+        if (data && (data.success === false || data.isError === true || data.error !== undefined)) throw new ConnectionServiceError('cli_failed');
+        verified.add('dws.execute'); verifiedAt = new Date().toISOString();
+        return { status: 'ok', data: redactData(data && 'result' in data ? data.result : data && 'data' in data ? data.data : value) };
+      }, options.signal, 120000);
+    } catch (error) {
+      const reasonCode = failure(error);
+      if (['not_connected','authorization_expired','scope_authorization_required'].includes(reasonCode)) return { status: 'auth_required', reasonCode };
+      if (executing && request.operationId === 'dws.execute' && commandFor(request.args.command).effect !== 'read' && !['permission_denied','app_permission_denied','org_policy_denied'].includes(reasonCode)
+        && ['execution_timeout','execution_cancelled','invalid_cli_output','output_limit_exceeded','cli_failed','service_unavailable'].includes(reasonCode)) return { status: 'failed', reasonCode: 'outcome_unknown', retryable: false };
+      return { status: ['identity_mismatch','file_access_denied','host_managed_operation','command_unavailable'].includes(reasonCode) ? 'denied' : 'failed', reasonCode, retryable: false };
+    }
+  }
   return {
     mode: 'local',
     async status(options: CallOptions = {}) {
@@ -69,6 +119,7 @@ export function createLocalBackend(settings: LocalSettings = {}, limits: Executi
     async invoke(input: InvokeInput, options: CallOptions = {}): Promise<InvokeResult> {
       let request: InvokeInput;
       try { request = parseInvokeInput(input); } catch { return { status: 'failed', reasonCode: 'invalid_request', retryable: false }; }
+      if (request.operationId === 'dws.catalog' || request.operationId === 'dws.describe' || request.operationId === 'dws.execute' || request.operationId === 'dws.jobs') return generic(request, options);
       try {
         return await queue.run(async signal => {
           if (!binding.profile) { await executor.check(signal); return { status: 'auth_required', reasonCode: 'not_connected' }; }
@@ -95,6 +146,6 @@ export function createLocalBackend(settings: LocalSettings = {}, limits: Executi
         return { status: 'failed', reasonCode, retryable: ['service_unavailable', 'execution_timeout', 'queue_full', 'queue_timeout'].includes(reasonCode) };
       }
     },
-    async dispose() { verified.clear(); await queue.dispose(); },
+    async dispose() { closed = true; verified.clear(); await jobs.dispose(); await queue.dispose(); },
   };
 }

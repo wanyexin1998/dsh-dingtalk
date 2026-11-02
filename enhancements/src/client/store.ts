@@ -1,4 +1,5 @@
 import type { AuthorizationContext, AuthStart, ConnectionStatus, ReasonCode } from '../shared/models.js';
+import { showAuthorizationLoading } from './loading.js';
 import { PromptRegistry } from './prompts.js';
 export interface ClientConnection { rpc: { call(channel: '/api', endpoint: string, payload: unknown, signal?: AbortSignal): Promise<{ ok: boolean; value?: unknown; error?: { code: string } }> } }
 export interface Snapshot { status: ConnectionStatus; pending: boolean; preparing?: boolean; actionRevision?: number; transaction?: AuthStart | undefined; fallback?: string | undefined; error?: ReasonCode | undefined }
@@ -103,7 +104,7 @@ export class ConnectionStore {
     if (this.snapshot.pending || this.snapshot.transaction) return;
     this.popup = window.open('about:blank', '_blank');
     const popup = this.popup, generation = ++this.generation;
-    if (popup) { try { popup.document.title = '钉钉连接'; popup.document.body.textContent = '正在准备连接，请稍候…'; popup.document.body.style.cssText = 'font:15px system-ui;max-width:28rem;margin:18vh auto;padding:24px;line-height:1.7;color:#475569'; } catch {} }
+    if (popup) { try { showAuthorizationLoading(popup); } catch {} }
     const controller = this.beginController = new AbortController();
     this.set({ pending: true, preparing: true, actionRevision: (this.snapshot.actionRevision || 0) + 1, error: undefined });
     try {

@@ -2,6 +2,17 @@ import { Children, cloneElement, isValidElement } from 'react';
 import type { ReactNode, ReactElement } from 'react';
 export interface LocaleFace { getSnapshot(): { active: string }; subscribe(fn: () => void): () => void }
 const english: Record<string, string> = {
+  '日程与待办': 'Calendar & tasks', '查询与管理': 'View & manage', '文档与表格': 'Docs & sheets', '读取与编辑': 'Read & edit', '消息与更多': 'Messages & more', '按账号权限': 'Account permissions',
+  '按你的指令操作，写入前确认。': 'Act on your instructions. Confirm before changes.', '解除后将停止调用与后台任务。再次使用需重新连接。': 'Disconnect stops calls and background tasks. Reconnect to use again.',
+  '连接后即可使用钉钉功能。': 'Connect to use DingTalk.', '钉钉 · 已完成': 'DingTalk · Done', '钉钉 · 处理中…': 'DingTalk · Working…',
+  '结果待确认，请先查询，勿重复提交。': 'Check the result before submitting again.', '此操作需要确认。': 'Confirmation required.', '已取消操作。': 'Operation cancelled.', '请使用会话工作区内的文件。': 'Use files in the conversation workspace.', '官方暂未开放此功能。': 'Not available from DingTalk yet.', '请在设置或管理员工具中管理。': 'Manage this in settings or admin tools.', '未找到此功能。': 'Command not found.', '当前会话未找到此任务。': 'Task not found in this conversation.', '后台任务已满。': 'Background task limit reached.',
+  '关闭弹窗': 'Close dialog', '解除后将停止读取数据。再次使用需重新连接。': 'Disconnecting stops data access. Reconnect to use it again.',
+  '账号信息': 'Account', '识别当前账号': 'Current account', '日程': 'Calendar', '只读': 'Read only', '你有权限的文档': 'Accessible documents',
+  '打开': 'Open', '准备中': 'Preparing', '等待中': 'Waiting', '重试解除连接': 'Retry disconnect', '重试': 'Retry', '复制': 'Copy', '复制申请': 'Copy request', '已复制': 'Copied',
+  '复制未成功，请手动复制：': 'Copy failed. Select and copy this request:', '申请文案': 'Access request', '在对话中使用你的工作信息。': 'Use your work information in conversations.',
+  '连接管理': 'Manage connection', '已授权账号': 'Authorized account', '已验证企业': 'Verified organization', '连接后可用': 'Available when connected',
+  '仅按你的指令读取，不会自动发送消息。': 'Reads only when requested. Never sends messages automatically.', '复制给管理员': 'Copy for administrator', '连接状态': 'Connection status',
+
   '查询结果暂时无法读取。': 'Query results could not be read.', '查询繁忙，请稍后重试。': 'Query busy. Try again later.', '查询暂未完成，请稍后重试。': 'Query incomplete. Try again later.',
   '连接': 'Connect', '重连': 'Reconnect', '断开': 'Disconnect',
   '保留': 'Keep', '解除': 'Disconnect', '解除后需重新授权。': 'Reauthorization will be required.',

@@ -20,7 +20,7 @@ if (packed.status !== 0) {
 const report = extractPackReport(JSON.parse(packed.stdout), packageJson.name)
 const files = report.files.map((entry) => entry.path)
 const allowed = [
-  /^docs\/PHASE1\.md$/,
+  /^docs\/(PHASE1|DWS-CAPABILITIES)\.md$/,
   /^package\.json$/,
   /^README\.md$/,
   /^README\.zh-CN\.md$/,
@@ -38,6 +38,7 @@ if (unexpected.length) throw new Error(`NPM tarball 包含未授权文件：${un
 
 const required = [
   'package.json',
+  'docs/DWS-CAPABILITIES.md',
   'README.md',
   'README.zh-CN.md',
   'LICENSE',
@@ -48,6 +49,10 @@ const required = [
   'enhancements/lib/host/index.js',
   'enhancements/lib/client.js',
   'enhancements/dws.lock.json',
+  'enhancements/lib/catalog/catalog.json',
+  'enhancements/skills/dingtalk-workspace/SKILL.md',
+  'enhancements/skills/dingtalk-workspace/DWS-LICENSE',
+  'enhancements/skills/dingtalk-workspace/DWS-NOTICE',
   'lib/bin.js',
   'lib/a2ui.js',
   'lib/a2ui.d.ts',
