@@ -4,3 +4,5 @@ node_modules/
 assets/skills/dws-cli/
 pnpm-lock.yaml
 *.tgz
+
+enhancements/

@@ -6,3 +6,6 @@ lib/
 .tmp/
 *.log
 .DS_Store
+artifacts/
+
+enhancements/artifacts/

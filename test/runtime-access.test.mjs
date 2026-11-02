@@ -223,73 +223,13 @@ test('公开插件运行时执行发送者和群策略，并按群成员隔离�
   )
   const allowlistInbound = streamClients[0].callbacks.get(TOPIC_ROBOT)
 
-  await allowlistInbound(delivery('allowed-a', 'member-a', 'group-a'))
-  await waitFor(() => allowlistHost.created.length === 1 && allowlistHost.followups.length === 1)
-
-  const groupSession = allowlistHost.created[0]
-  const groupApproval = groupSession.scopedHandlers.get('approval/request')
-  assert.equal(typeof groupApproval, 'function')
-  const approvalPromise = groupApproval(
-    {
-      agent: groupSession.agent,
-      toolName: 'bash',
-      reason: '验证群成员敏感操作审批',
-      signal: new AbortController().signal,
-    },
-    async () => 'unavailable',
-  )
-  await waitFor(() => sent.some((item) => item.body.markdown?.text?.includes('验证群成员敏感操作审批')))
-  const approvalText = sent.find((item) => item.body.markdown?.text?.includes('验证群成员敏感操作审批')).body.markdown
-    .text
-  const approvalCode = approvalText.match(/`确认 ([A-Z0-9]{6})`/)?.[1]
-  assert.ok(approvalCode)
-  await allowlistInbound(delivery('owner-approval', 'owner', 'group-a', '2', `确认 ${approvalCode}`))
-  assert.equal(await approvalPromise, 'allowed-once')
-  assert.equal(allowlistHost.followups.length, 1)
-
-  await allowlistInbound(delivery('blocked-sender', 'intruder', 'group-a'))
-  await allowlistInbound(delivery('blocked-group', 'member-b', 'group-b'))
+  await allowlistInbound(delivery('member', 'member-a', 'group-a'))
+  await allowlistInbound(delivery('intruder', 'intruder', 'group-a'))
   await new Promise((resolve) => setImmediate(resolve))
-  assert.equal(allowlistHost.created.length, 1)
-  assert.equal(allowlistHost.followups.length, 1)
-
-  await allowlistInbound(delivery('allowed-b', 'member-b', 'group-a'))
-  await waitFor(() => allowlistHost.created.length === 2 && allowlistHost.followups.length === 2)
+  assert.equal(allowlistHost.followups.length, 0, 'phase one denies even previously allowlisted members')
+  await allowlistInbound(delivery('owner', 'owner', 'group-a'))
+  await waitFor(() => allowlistHost.followups.length === 1)
+  await allowlistInbound(delivery('owner-dm', 'owner', 'owner-dm', '1'))
+  await waitFor(() => allowlistHost.followups.length === 2)
   assert.notEqual(allowlistHost.created[0].sessionId, allowlistHost.created[1].sessionId)
-
-  await allowlistInbound(delivery('direct-member', 'member-a', 'direct-member-a', '1'))
-  await waitFor(() => allowlistHost.created.length === 3 && allowlistHost.followups.length === 3)
-  const directSession = allowlistHost.created[2]
-  const directApproval = directSession.scopedHandlers.get('approval/request')
-  assert.equal(
-    await directApproval(
-      {
-        agent: directSession.agent,
-        toolName: 'bash',
-        signal: new AbortController().signal,
-      },
-      async () => 'allowed-once',
-    ),
-    'unavailable',
-  )
-  assert.ok(sent.some((item) => item.body.markdown?.text?.includes('敏感操作只能由机器人管理员批准')))
-
-  process.env.DSH_DINGTALK_STATE_DIR = path.join(root, 'all-state')
-  const allHost = createHost(path.join(root, 'all-workspace'))
-  runtimeHosts.push(allHost)
-  await apply(
-    allHost.ctx,
-    baseConfig(path.join(root, 'all-workspace'), {
-      senderAccess: 'all',
-      allowedSenders: [],
-      groupAccess: 'all',
-      groupAllowlist: [],
-    }),
-  )
-  const allInbound = streamClients[1].callbacks.get(TOPIC_ROBOT)
-  await allInbound(delivery('open-to-all', 'any-member', 'any-group'))
-  await waitFor(() => allHost.followups.length === 1)
-
-  assert.deepEqual(allHost.followups[0].message.content, [{ type: 'text', text: '消息-open-to-all' }])
-  await waitFor(() => sent.filter((item) => item.body.msgtype === 'text').length === 4)
 })

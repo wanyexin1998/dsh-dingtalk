@@ -1058,7 +1058,8 @@ test('ready 超时会等待旧订阅进程退出后再重试，不并行创建�
     employee: { ...employee, agentUuid: 'employee-no-overlap' },
     stateDir: path.join(root, 'state'),
     ...dwsInvocation,
-    readyTimeoutMs: 300,
+    // Windows process startup can exceed 300 ms; first fake process never sends ready.
+    readyTimeoutMs: 1_500,
     log: () => {},
     onMessage: () => {},
   })

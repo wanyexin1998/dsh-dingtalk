@@ -241,9 +241,8 @@ for (const preset of ['success', 'missing', 'resolve-failed']) {
       } else {
         live.set(replacement.id, replacement)
         const beforeAttempts = attempts.length
-        await send(key)
+        await assert.rejects(send(key), /owned|ownership|borrow|another|external/)
         assert.equal(attempts.length, beforeAttempts)
-        assert.ok(scopes.at(-1).names.has('ask_user_question'))
       }
       // setup 已安装后回滚；同一持久会话 ID 再恢复仍必须完成安装。
       live.delete(first.id)

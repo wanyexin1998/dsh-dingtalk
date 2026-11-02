@@ -13,9 +13,11 @@ const bugTemplate = readFileSync(new URL('../.github/ISSUE_TEMPLATE/bug.yml', im
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
 const readmeZh = readFileSync(new URL('../README.zh-CN.md', import.meta.url), 'utf8')
 
-test('组织公开仓库从 0.5.0 开始通过 Trusted Publisher 发布正式版本', () => {
+test('fork 保留上游发布配置，定制包保持 private 且开发分支不发布', () => {
   assert.deepEqual(releaseConfig.branches, ['main'])
-  assert.equal(packageJson.repository.url, 'git+https://github.com/DingTalk-Real-AI/dsh-dingtalk.git')
+  assert.equal(packageJson.repository.url, 'git+https://github.com/wanyexin1998/dsh-dingtalk.git')
+  assert.equal(packageJson.private, true)
+  assert.match(releaseWorkflow, /if: github.ref == 'refs\/heads\/main'/)
   assert.match(packageJson.devDependencies['semantic-release'], /^\^25\./)
   assert.match(
     lockfile,

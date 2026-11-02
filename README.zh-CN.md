@@ -1,3 +1,5 @@
+> Fork 第一阶段：Web 个人授权与查询已迁入；IM 暂限 owner 对话，工具执行转到 Web。未完成真实联合验收。详见 [阶段说明](docs/PHASE1.md)。
+
 # DSH 钉钉连接器
 
 简体中文 | [English](README.md)

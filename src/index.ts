@@ -1,3 +1,4 @@
+import { installPhaseOneBoundary } from './phase-one-boundary.js'
 /**
  * dsh-dingtalk — DingTalk IM channel plugin for DeepSeek Harness.
  * Inbound: DingTalk Stream long connection (no public endpoint needed).
@@ -148,7 +149,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         log,
       })
     : undefined
-  if (config.tools.enabled && dwsTools) void dwsTools.enable()
+  if (config.tools.enabled) log('phase 1: IM DWS disabled; connect personal data in Web settings')
 
   await Promise.all([
     ...resolution.accounts.map(async (account) => {
@@ -536,10 +537,12 @@ async function startAccount(
     log,
   })
   const installBotTools = (agentCtx: HostAgentContext, agent: HostAgent) => {
+    installPhaseOneBoundary(agentCtx)
     questions.install(agentCtx, agent)
     files.install(agentCtx, agent)
   }
   const bridge = new Bridge(agents, renderer, bindings, {
+    exclusiveOwnership: true,
     cwd,
     log,
     modelOverrides,
@@ -752,6 +755,7 @@ async function startAccount(
         await noticeReject(msg, `${msg.senderStaffId}:${msg.conversationId}:${access.reason}`, notice)
         return
       }
+      if (msg.senderStaffId !== owner.status().ownerStaffId) return
       await accessReplyQueues.get(msg.conversationId)?.catch(() => undefined)
       log(`inbound message accepted (${msg.conversationType})`)
 

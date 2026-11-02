@@ -264,7 +264,7 @@ for (const [channel, conversationType] of [
     await send('/cd 2')
     let current = await send('切换后消息')
     check(current, target)
-    check(await send('其他成员消息', 'fixture-other'), cwd)
+    if (channel !== 'robot') check(await send('其他成员消息', 'fixture-other'), cwd)
     for (const command of ['/new', '/model use fixture/other', '/model reset']) {
       await send(command)
       const reopened = await send('重开后消息')
@@ -284,6 +284,6 @@ for (const [channel, conversationType] of [
     check(await send('未注册目录消息'), unregistered)
     await send('/cd reset')
     check(await send('恢复默认后消息'), cwd)
-    check(await send('其他成员仍在默认目录', 'fixture-other'), cwd)
+    if (channel !== 'robot') check(await send('其他成员仍在默认目录', 'fixture-other'), cwd)
   })
 }

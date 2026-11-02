@@ -20,6 +20,7 @@ if (packed.status !== 0) {
 const report = extractPackReport(JSON.parse(packed.stdout), packageJson.name)
 const files = report.files.map((entry) => entry.path)
 const allowed = [
+  /^docs\/PHASE1\.md$/,
   /^package\.json$/,
   /^README\.md$/,
   /^README\.zh-CN\.md$/,
@@ -29,6 +30,8 @@ const allowed = [
   /^cordis\.patch\.yml$/,
   /^lib\//,
   /^assets\//,
+  /^enhancements\/(lib|skills)\//,
+  /^enhancements\/(dws\.lock\.json|LICENSE)$/,
 ]
 const unexpected = files.filter((file) => !allowed.some((pattern) => pattern.test(file)))
 if (unexpected.length) throw new Error(`NPM tarball 包含未授权文件：${unexpected.join(', ')}`)
@@ -42,6 +45,9 @@ const required = [
   'CHANGELOG.md',
   'cordis.patch.yml',
   'lib/index.js',
+  'enhancements/lib/host/index.js',
+  'enhancements/lib/client.js',
+  'enhancements/dws.lock.json',
   'lib/bin.js',
   'lib/a2ui.js',
   'lib/a2ui.d.ts',
@@ -72,7 +78,7 @@ try {
     [
       '--input-type=module',
       '-e',
-      `import { A2uiInteractions } from '@dingtalk-real-ai/dsh-dingtalk/a2ui';
+      `import { A2uiInteractions } from '@wanyexin1998/dsh-dingtalk/a2ui';
      if (typeof A2uiInteractions !== 'function') process.exit(1);`,
     ],
     { cwd: stagedPackage, encoding: 'utf8' },
